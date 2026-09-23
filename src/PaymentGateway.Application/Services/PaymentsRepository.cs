@@ -1,4 +1,5 @@
-﻿using PaymentGateway.Api.Models.Responses;
+﻿
+using PaymentGateway.Application.DTOs.Responses;
 
 namespace PaymentGateway.Api.Services;
 

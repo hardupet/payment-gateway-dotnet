@@ -1,19 +1,59 @@
-using PaymentGateway.Api.Services;
+
+
+using FluentValidation.AspNetCore;
+
+using System.Text.Json.Serialization;
+
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
+using PaymentGateway.Api.HealthChecks;
+using PaymentGateway.Api.Middleware;
+using PaymentGateway.Application;
+using PaymentGateway.Infrastructure;
+using PaymentGateway.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(
+        new JsonStringEnumConverter());
+}); 
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddSingleton<PaymentsRepository>();
+builder.Services.AddFluentValidationAutoValidation();
+
+builder.Services.AddApplication();
+
+builder.Services.AddInfrastructure(
+    builder.Configuration);
+
+builder.Services.Configure<BankOptions>(
+    builder.Configuration.GetSection(
+        BankOptions.SectionName));
+
+builder.Services.AddHttpClient(
+    "BankHealthCheck",
+    client =>
+    {
+        client.BaseAddress = new Uri(
+            builder.Configuration["Bank:BaseUrl"]!);
+
+        client.Timeout = TimeSpan.FromSeconds(2);
+    });
+
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<AcquiringBankHealthCheck>(
+        "acquiring-bank",
+        tags: ["ready"]);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -22,8 +62,24 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseAuthorization();
-
 app.MapControllers();
 
+app.MapHealthChecks(
+    "/health/live",
+    new HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+
+app.MapHealthChecks(
+    "/health/ready",
+    new HealthCheckOptions
+    {
+        Predicate =
+            registration =>
+                registration.Tags.Contains("ready")
+    });
+
 app.Run();
+
+public partial class Program;
